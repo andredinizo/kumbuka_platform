@@ -1,0 +1,108 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { listRecurrences } from '../data/recurrences.js'
+import { listProfiles } from '../data/profiles.js'
+import { listOccurrences } from '../data/occurrences.js'
+import { listTranscriptions } from '../data/transcriptions.js'
+import { listSummarizations } from '../data/summarizations.js'
+import StatusBadge from '../components/StatusBadge.jsx'
+import { formatDateTime } from '../format.js'
+
+const STATUS_FIELDS = [
+  ['Whisper', 'status_transcricao_whisper'],
+  ['VTT', 'status_vtt'],
+  ['Enriquec.', 'status_enriquecimento'],
+  ['Sumariz.', 'status_sumarizacao'],
+  ['Entrega', 'status_entrega'],
+]
+
+export default function Dashboard() {
+  const [counts, setCounts] = useState({})
+  const [failed, setFailed] = useState([])
+  const [errors, setErrors] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.allSettled([
+      listRecurrences(),
+      listProfiles(),
+      listOccurrences(),
+      listTranscriptions(),
+      listSummarizations(),
+    ]).then((results) => {
+      const [rec, prof, occ, tr, sum] = results
+      const val = (r) => (r.status === 'fulfilled' ? r.value : [])
+      setCounts({
+        recurrences: val(rec).length,
+        profiles: val(prof).length,
+        occurrences: val(occ).length,
+        transcriptions: val(tr).length,
+        summarizations: val(sum).length,
+      })
+      setFailed(
+        val(occ).filter((o) => STATUS_FIELDS.some(([, k]) => o[k] === 'falhou'))
+      )
+      setErrors(results.filter((r) => r.status === 'rejected').map((r) => r.reason.message))
+      setLoading(false)
+    })
+  }, [])
+
+  const CARDS = [
+    { label: 'Recorrências', key: 'recurrences', to: '/recurrences' },
+    { label: 'Perfis', key: 'profiles', to: '/profiles' },
+    { label: 'Ocorrências', key: 'occurrences', to: '/occurrences' },
+    { label: 'Transcrições', key: 'transcriptions', to: '/transcriptions' },
+    { label: 'Sumarizações', key: 'summarizations', to: '/summarizations' },
+  ]
+
+  return (
+    <div>
+      <h2>Dashboard</h2>
+      {loading && <p className="muted">Carregando…</p>}
+      {errors.map((e, i) => (
+        <p className="error" key={i}>{e}</p>
+      ))}
+
+      {!loading && (
+        <>
+          <div className="cards">
+            {CARDS.map((c) => (
+              <Link className="card" to={c.to} key={c.key}>
+                <span className="card-num">{counts[c.key] ?? 0}</span>
+                <span className="card-label">{c.label}</span>
+              </Link>
+            ))}
+          </div>
+
+          <h3>Ocorrências com falha</h3>
+          {failed.length === 0 ? (
+            <p className="muted">Nenhuma falha. 🎉</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Início</th>
+                  <th>Recorrência</th>
+                  {STATUS_FIELDS.map(([label]) => <th key={label}>{label}</th>)}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {failed.map((o) => (
+                  <tr key={o.id}>
+                    <td>{formatDateTime(o.timestamp_inicio)}</td>
+                    <td>{o.serie_id}</td>
+                    {STATUS_FIELDS.map(([label, k]) => (
+                      <td key={k}><StatusBadge value={o[k]} /></td>
+                    ))}
+                    <td><Link to={`/occurrences/${o.id}`}>Abrir</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
