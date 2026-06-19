@@ -2,19 +2,22 @@
 
 ## Objetivo
 Ver o histórico de ocorrências de reunião e o detalhe de uma, incluindo as 5 colunas de status do
-pipeline. Somente leitura (os dados vêm do pipeline).
+pipeline. Somente leitura (os dados vêm do pipeline, que escreve na tabela `meeting_occurrence`).
 
 ## Rotas
 - `/occurrences` — lista (aceita `?serie_id=` para filtrar por recorrência)
 - `/occurrences/:id` — detalhe
 
 ## Dados
-- Lista SharePoint `Ocorrencias` (espelhada de `meeting_occurrence`).
+- Tabela Databricks `meeting_occurrence`.
 - `data/occurrences.js`: `listOccurrences(filters)`, `getOccurrence(id)`.
-  - `filters` suportado no MVP: `serie_id` (filtragem no cliente).
-- Campos: `serie_id`, `timestamp_inicio`, `timestamp_fim`, `local_gravacao`,
+  - `filters` suportado no MVP: `serie_id` → aplica `WHERE serie_id = :serie_id` no **SQL**.
+- Colunas: `id`, `serie_id`, `timestamp_inicio`, `timestamp_fim`, `local_gravacao`,
   `status_transcricao_whisper`, `status_vtt`, `status_enriquecimento`, `status_sumarizacao`,
   `status_entrega`, `timestamp_criacao`, `timestamp_atualizacao`.
+- **SQL:** `SELECT <colunas> FROM meeting_occurrence` (+ `WHERE serie_id = :serie_id` quando filtrado;
+  `ORDER BY timestamp_inicio DESC` recomendado). Detalhe: `... WHERE id = :id`.
+- **Coerção** (gotcha §00): timestamps vêm como string → formatar com `formatDateTime`.
 
 ## Layout
 - **Lista:** Início, Recorrência, e os 5 status como `StatusBadge` + "Abrir".
@@ -31,3 +34,4 @@ pipeline. Somente leitura (os dados vêm do pipeline).
 ## Critério de pronto
 - Lista mostra ocorrências com badges coloridos por status.
 - Detalhe mostra todos os campos e os 5 status.
+- `/occurrences?serie_id=X` filtra por recorrência (via `WHERE serie_id`).

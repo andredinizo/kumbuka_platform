@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listRecurrences } from '../data/recurrences.js'
 
-// Prova o fluxo ponta-a-ponta da fundacao: pagina -> data/* -> proxy -> Graph -> MeetingSeries.
+// Prova o fluxo ponta-a-ponta da fundacao: pagina -> data/* -> proxy /sql -> Databricks (recorrencias_reuniao).
 export default function RecurrenceList() {
   const [rows, setRows] = useState([])
   const [error, setError] = useState(null)
@@ -40,7 +40,7 @@ export default function RecurrenceList() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{r.nome}</td>
-                <td>{r.serie_ativa ? 'Sim' : 'Não'}</td>
+                <td>{r.recorrencia_ativa ? 'Sim' : 'Não'}</td>
                 <td>{r.descricao}</td>
                 <td><Link to={`/recurrences/${r.id}`}>Abrir</Link></td>
               </tr>

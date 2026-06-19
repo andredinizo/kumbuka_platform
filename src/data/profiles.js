@@ -1,55 +1,73 @@
-// REGRA #4: unico arquivo que conhece a lista PerfisSumarizacao e seus campos.
-import { graphGet, graphPost, graphPatch, SITE_ID } from './graphClient.js'
+// REGRA #4: unico arquivo que conhece a tabela perfis_sumarizacao e suas colunas.
+import { dbQuery, param } from './databricksClient.js'
 
-const LIST = 'PerfisSumarizacao'
-const base = () => `/sites/${SITE_ID}/lists/${LIST}`
+const TABLE = 'perfis_sumarizacao'
+const COLS = 'id, serie_id, nome, descricao, versao, perfil_ativo, prompt'
 
-function fromItem(item) {
-  const f = item.fields || {}
+function fromRow(r) {
   return {
-    id: item.id,
-    serie_id: f.serie_id ?? '',
-    nome: f.nome ?? f.Title ?? '',
-    descricao: f.descricao ?? '',
-    versao: f.versao ?? 1,
-    perfil_ativo: !!f.perfil_ativo,
-    prompt: f.prompt ?? '',
-  }
-}
-
-function toFields(data) {
-  return {
-    serie_id: data.serie_id,
-    nome: data.nome,
-    descricao: data.descricao,
-    versao: Number(data.versao) || 1,
-    perfil_ativo: data.perfil_ativo,
-    prompt: data.prompt,
+    id: r.id ?? '',
+    serie_id: r.serie_id ?? '',
+    nome: r.nome ?? '',
+    descricao: r.descricao ?? '',
+    versao: Number(r.versao) || 1,
+    perfil_ativo: r.perfil_ativo === 'true',
+    prompt: r.prompt ?? '',
   }
 }
 
 export async function listProfiles() {
-  const data = await graphGet(`${base()}/items?expand=fields`)
-  return (data.value || []).map(fromItem)
+  const rows = await dbQuery(`SELECT ${COLS} FROM ${TABLE} ORDER BY nome`)
+  return rows.map(fromRow)
 }
 
 export async function listProfilesByRecurrence(serieId) {
-  // Filtro feito no cliente para o MVP (volume baixo); evita depender de indexacao do campo.
-  const all = await listProfiles()
-  return all.filter((p) => p.serie_id === serieId)
+  // Filtro feito no SQL (WHERE), nao no cliente.
+  const rows = await dbQuery(
+    `SELECT ${COLS} FROM ${TABLE} WHERE serie_id = :serie_id ORDER BY nome`,
+    [param('serie_id', serieId)]
+  )
+  return rows.map(fromRow)
 }
 
 export async function getProfile(id) {
-  const item = await graphGet(`${base()}/items/${id}?expand=fields`)
-  return fromItem(item)
+  const rows = await dbQuery(`SELECT ${COLS} FROM ${TABLE} WHERE id = :id`, [param('id', id)])
+  if (!rows.length) throw new Error(`Perfil ${id} nao encontrado.`)
+  return fromRow(rows[0])
 }
 
 export async function createProfile(data) {
-  const item = await graphPost(`${base()}/items`, { fields: toFields(data) })
-  return fromItem(item)
+  const id = crypto.randomUUID()
+  await dbQuery(
+    `INSERT INTO ${TABLE} (id, serie_id, nome, descricao, versao, perfil_ativo, prompt)
+     VALUES (:id, :serie_id, :nome, :descricao, :versao, :perfil_ativo, :prompt)`,
+    [
+      param('id', id),
+      param('serie_id', data.serie_id),
+      param('nome', data.nome),
+      param('descricao', data.descricao),
+      param('versao', Number(data.versao) || 1, 'INT'),
+      param('perfil_ativo', !!data.perfil_ativo, 'BOOLEAN'),
+      param('prompt', data.prompt),
+    ]
+  )
+  return getProfile(id)
 }
 
 export async function updateProfile(id, data) {
-  await graphPatch(`${base()}/items/${id}/fields`, toFields(data))
+  await dbQuery(
+    `UPDATE ${TABLE} SET serie_id = :serie_id, nome = :nome, descricao = :descricao,
+       versao = :versao, perfil_ativo = :perfil_ativo, prompt = :prompt
+     WHERE id = :id`,
+    [
+      param('id', id),
+      param('serie_id', data.serie_id),
+      param('nome', data.nome),
+      param('descricao', data.descricao),
+      param('versao', Number(data.versao) || 1, 'INT'),
+      param('perfil_ativo', !!data.perfil_ativo, 'BOOLEAN'),
+      param('prompt', data.prompt),
+    ]
+  )
   return getProfile(id)
 }

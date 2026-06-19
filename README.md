@@ -1,45 +1,46 @@
 # Kumbuk.ai — Frontend (MVP)
 
 Interface web para ver e editar os dados do pipeline de transcrição/sumarização de reuniões.
-SharePoint é o backend; o app é uma SPA React+Vite com um proxy local que autentica no Microsoft
-Graph usando a app registration existente. O plano completo está em
+Databricks é o backend; o app é uma SPA React+Vite com um proxy local que autentica no Databricks
+e executa SQL via a SQL Statement Execution API. O plano completo está em
 [dev_files/plans/](dev_files/plans/) (um doc por feature).
 
 ## Como rodar
 
-1. Pré-requisitos: Node 18+ e a app registration (permissões de aplicativo no SharePoint).
-2. `cp .env.example .env` e preencha:
-   - `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET` — da app registration (ficam só no servidor local).
-   - `VITE_SITE_ID` — ID do site SharePoint onde estão as listas (não é segredo).
+1. Pré-requisitos: Node 18+ e um SQL Warehouse Databricks + um token de acesso (PAT).
+2. `cp .env.example .env` e preencha (tudo fica só no servidor local; nada é exposto ao browser):
+   - `DATABRICKS_HOST` — URL do workspace (ex.: `https://<id>.azuredatabricks.net`).
+   - `DATABRICKS_TOKEN` — Personal Access Token (segredo).
+   - `DATABRICKS_WAREHOUSE_ID` — ID do SQL Warehouse que executa as queries.
+   - `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` — catalog/schema padrão das tabelas.
 3. `npm install`
 4. `npm run dev` → abra http://localhost:5173
 
 Para rodar a partir do build: `npm run build` e depois `npm run preview` (o proxy funciona nos dois).
 
-## Permissões (Sites.ReadWrite.Selected)
+## Permissões Databricks
 
-Com `Sites.Selected`, um admin precisa **conceder o app ao site específico** uma vez:
-`POST /sites/{site-id}/permissions` com `roles: ["write"]` para o `CLIENT_ID`. Sem isso, as chamadas
-às listas retornam 403.
+O PAT precisa de `CAN_USE` no SQL Warehouse e de privilégios no Unity Catalog: `SELECT` nas tabelas
+de leitura e `SELECT`+`MODIFY` nas de CRUD. Sem isso, as queries retornam erro de permissão.
 
-## Listas SharePoint usadas
+## Tabelas usadas (Unity Catalog)
 
-Já existentes: `MeetingSeries`, `PerfisSumarizacao`.
-A espelhar das tabelas Databricks (ver seção 4 do plano do pipeline e
-[dev_files/plano_ex_plataforma.md](dev_files/plano_ex_plataforma.md)):
-`Ocorrencias`, `Transcricoes`, `Sumarizacoes`. Os nomes de campo esperados estão em cada módulo de
-`src/data/`.
+Editáveis pelo frontend (CRUD): `recorrencias_reuniao`, `perfis_sumarizacao`.
+Somente leitura (escritas pelo pipeline): `meeting_occurrence`, `transcricoes`, `sumarizacoes`
+(ver [dev_files/plano_ex_plataforma.md](dev_files/plano_ex_plataforma.md)). Os nomes de coluna
+esperados estão em cada módulo de `src/data/`.
 
 ## Arquitetura (resumo)
 
-- `vite.config.js` — proxy `/graph/*`: guarda o segredo, pega/cacheia o token de app e repassa ao
-  Graph. É um repassador burro (não conhece entidades).
-- `src/data/<entidade>.js` — **único lugar que sabe onde cada dado está** (qual lista, quais campos).
-  Mudou a fonte de um dado? Muda só aqui.
+- `vite.config.js` — proxy `POST /sql`: guarda o token, executa o statement no Warehouse (com poll)
+  e devolve `{ columns, rows }`. É um repassador burro (não conhece tabelas/entidades).
+- `src/data/<entidade>.js` — **único lugar que sabe onde cada dado está** (qual tabela, quais
+  colunas) e monta o SQL parametrizado. Mudou a fonte de um dado? Muda só aqui.
+  - A API devolve tudo como string: cada módulo coage tipos no `fromRow`.
 - `src/pages/` — páginas de lista e formulário/detalhe. `src/components/` — `Table`(inline),
   `Field`, `Form`, `StatusBadge`, `DownloadButton`.
 
 ## Auth
 
 Sem login por enquanto (ferramenta interna, máquinas confiáveis). Quando precisar, o ponto de
-entrada é o proxy em `vite.config.js` (validar token de usuário / MSAL delegado) — a UI não muda.
+entrada é o proxy em `vite.config.js` (trocar o PAT por OAuth M2M / token de usuário) — a UI não muda.

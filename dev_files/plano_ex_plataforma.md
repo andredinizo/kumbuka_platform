@@ -78,7 +78,7 @@ Processo leve e frequente que detecta novas gravações de reunião e as registr
 
 #### Passos
 
-1. Obtém a lista de séries de reuniões ativas da lista SharePoint `MeetingSeries` (filtro: `serie_ativa = true`)
+1. Obtém a lista de séries de reuniões ativas da tabela Databricks `recorrencias_reuniao` (filtro: `recorrencia_ativa = true`)
 2. Para cada série ativa, lista os arquivos de gravação no `local_gravacao` via Graph API
 3. Verifica a pasta `reunioes_avulsas` no SharePoint por novas gravações (sempre verificada, independente de séries)
 4. **(Experimental)** Executa varredura recursiva de uma pasta-raiz configurável no SharePoint (incluindo subpastas) para avaliar viabilidade de descoberta ampla de gravações
@@ -402,7 +402,7 @@ Estruture o resumo em HTML com as seguintes seções:
 ```
 
 > 
-**Nota:** No sistema final, esses prompts virão da lista SharePoint `PerfisSuparizacao`, permitindo personalização por série e comparação de estratégias.
+**Nota:** No sistema final, esses prompts virão da tabela Databricks `perfis_sumarizacao`, permitindo personalização por série e comparação de estratégias.
 
 **Parâmetros da chamada LLM:**
 - **Modelo:** `gpt-4.1` (configurável por perfil no futuro)
@@ -534,19 +534,25 @@ id` | STRING PK | UUID da sumarização |
 | `timestamp_entrega` | TIMESTAMP | Momento da entrega |
 | `timestamp_criacao` | TIMESTAMP | Timestamp de criação |
 
-### 4.2. Listas SharePoint (editáveis pelo usuário)
+### 4.2. Tabelas Databricks de configuração (editáveis pelo usuário via frontend)
 
-#### `MeetingSeries` — Séries de reuniões monitoradas
+> Estas duas tabelas **antes eram listas SharePoint** (`RecorrenciasReuniao`, `PerfisSumarizacao`).
+> Agora são tabelas Delta no mesmo Unity Catalog das demais — o frontend as lê e escreve por SQL
+> (ver os planos do frontend em `plans/`), e o pipeline as consulta como tabela Databricks (não mais
+> via Graph/SharePoint). São a fonte única de configuração: tudo que escreve nelas (frontend) é o que
+> o pipeline lê.
+
+#### `recorrencias_reuniao` — Séries de reuniões monitoradas
 
 | Campo | Tipo | Descrição |
 |-------|------|-----------|
 | `id` | STRING | Identificador único |
 | `nome` | STRING | Nome da série |
-| `serie_ativa` | BOOL | Flag de ativação |
+| `recorrencia_ativa` | BOOL | Flag de ativação |
 | `descricao` | STRING | Descrição da série |
-| `local_gravacao` | STRING | Path no SharePoint onde ficam as gravações |
+| `local_gravacao` | STRING | Path no SharePoint onde ficam as gravações (a gravação em si continua no SharePoint/Teams) |
 
-#### `PerfisSumarizacao` — Perfis de sumarização
+#### `perfis_sumarizacao` — Perfis de sumarização
 
 | Campo | Tipo | Descrição |
 |-------|------|-----------|
@@ -565,7 +571,7 @@ erDiagram
 	RECORRENCIAS {
 	str id PK
 	str nome_recorrencia
-	bool serie_ativa
+	bool recorrencia_ativa
 	str descricao
 	str local_gravacao
 	}
@@ -695,7 +701,6 @@ jarvix_token = response.json()["access_token"]
 | Upload simples (<4MB) | `PUT /sites/{site_id}/drive/root:/{path}:/content` |
 | Upload sessão (>=4MB) | `POST .../createUploadSession` → `PUT` chunks de 10MB |
 | Criar pasta | `POST /sites/{site_id}/drive/root:/{parent}:/children` |
-| Listar items de lista | `GET /sites/{site_id}/lists/{list_name}/items` |
 
 ### 5.4. Endpoints LLM/Whisper
 

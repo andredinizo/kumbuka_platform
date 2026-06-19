@@ -7,33 +7,38 @@ Duas entidades quase idênticas em estrutura. Documentadas juntas.
 - `/summarizations`, `/summarizations/:id` (aceita `?reuniao_id=` para filtrar por ocorrência)
 
 ## Dados
-- Listas SharePoint `Transcricoes` e `Sumarizacoes` (espelhadas).
+- Tabelas Databricks `transcricoes` e `sumarizacoes`.
 - `data/transcriptions.js`: `listTranscriptions(filters)`, `getTranscription(id)`.
-  Campos: `reuniao_id`, `serie_id`, `tipo` (whisper/teams_vtt/enriquecida), `texto`, `timestamp_criacao`.
+  Colunas: `id`, `reuniao_id`, `serie_id`, `tipo` (whisper/teams_vtt/enriquecida), `texto`,
+  `timestamp_criacao`.
 - `data/summarizations.js`: `listSummarizations(filters)`, `getSummarization(id)`.
-  Campos: `reuniao_id`, `transcricao_id`, `perfil_id`, `texto`, `status`, `timestamp_criacao`.
-- `filters` suportado no MVP: `reuniao_id` (filtragem no cliente).
+  Colunas: `id`, `reuniao_id`, `transcricao_id`, `perfil_id`, `texto`, `status`, `timestamp_criacao`.
+- `filters` suportado no MVP: `reuniao_id` → `WHERE reuniao_id = :reuniao_id` no **SQL**.
+- **SQL:** `SELECT <colunas> FROM <tabela>` (+ WHERE quando filtrado; `ORDER BY timestamp_criacao
+  DESC`). Detalhe: `... WHERE id = :id`.
 
 ## Layout
 - **Lista (transcrições):** Tipo, Ocorrência, Criada em + "Abrir".
 - **Lista (sumarizações):** Perfil, Ocorrência, Status, Criada em + "Abrir".
 - **Detalhe:** metadados + bloco de texto (`.text-block`, pre-wrap, rolável) + botão de download.
-  - Transcrição baixa `.txt`. Sumarização baixa `.html` (texto já é HTML, ver seção 3.5 do pipeline).
+  - Transcrição baixa `.txt`. Sumarização baixa `.html` (texto já é HTML, ver §3.5 do pipeline).
   - **O conteúdo é exibido SEMPRE como texto puro**, inclusive a sumarização (que é HTML): mostra-se
     a marcação como texto, NÃO renderizada (sem `dangerouslySetInnerHTML`). O HTML renderizado fica
     só no arquivo baixado. Decisão do usuário.
 
 ## Componentes
 - `DownloadButton` — recebe `filename`, `content`, `mime`; gera Blob e dispara download no cliente.
-  (Sem servidor: download é puramente client-side a partir do texto já carregado.)
+  (Sem servidor de arquivos: download é puramente client-side a partir do texto já carregado.)
 
 ## Nota de viabilidade (texto grande)
-- Para o MVP o `texto` vem da coluna da lista. Se exceder o limite do SharePoint, evoluir
-  `data/*` para ler o artefato do drive via Graph (campo com path). **Confirmar volume real.**
+- No Databricks a coluna `texto` é `STRING` (sem o limite de coluna que o SharePoint tinha), então o
+  texto vem direto na query. **Cuidado oposto:** uma transcrição/sumarização pode ser grande; o
+  `SELECT` da **lista** NÃO deve trazer a coluna `texto` (só metadados) — `texto` só no **detalhe**
+  (`WHERE id = :id`). Confirmar tamanhos reais na construção.
 
 ## Estados de borda
 - Carregando/erro/vazio. Texto ausente → aviso "sem conteúdo".
 
 ## Critério de pronto
 - Listas e detalhes carregam; download gera arquivo com o conteúdo exibido.
-- `?reuniao_id=` filtra por ocorrência (usado no drill-down).
+- `?reuniao_id=` filtra por ocorrência (via `WHERE reuniao_id`; usado no drill-down).

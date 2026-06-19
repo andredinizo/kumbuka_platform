@@ -10,11 +10,18 @@ drill-down recorrência → perfis).
 - `/profiles/:id` — editar
 
 ## Dados
-- `data/profiles.js` (único lugar que conhece `PerfisSumarizacao` e seus campos):
+- `data/profiles.js` (único lugar que conhece a tabela `perfis_sumarizacao` e suas colunas):
   `listProfiles()`, `listProfilesByRecurrence(serieId)`, `getProfile(id)`, `createProfile(data)`,
   `updateProfile(id, data)`.
-- Campos: `serie_id` (text/FK), `nome` (text), `descricao` (text), `versao` (int),
-  `perfil_ativo` (bool), `prompt` (textarea grande).
+- Colunas: `id` (string/UUID), `serie_id` (string/FK), `nome` (string), `descricao` (string),
+  `versao` (int), `perfil_ativo` (bool), `prompt` (texto grande).
+- **SQL** (parametrizado):
+  - lista: `SELECT id, serie_id, nome, descricao, versao, perfil_ativo, prompt FROM perfis_sumarizacao`
+  - filtro por recorrência: o MESMO SELECT `+ WHERE serie_id = :serie_id` (filtragem no **SQL**,
+    não no cliente — ver §06).
+  - get/create/update análogos a recorrências (UUID gerado no client no create; `CAST(... AS
+    BOOLEAN)` em `perfil_ativo`; `CAST(:versao AS INT)` em `versao`).
+- **Coerção** (gotcha §00): `perfil_ativo` → bool; `versao` → `Number(...)`.
 
 ## Layout
 - **Lista:** Nome, Versão, Ativo, (Recorrência) + "Abrir". Botão "+ Novo perfil".
@@ -31,5 +38,5 @@ drill-down recorrência → perfis).
 - Lista: carregando/erro/vazio. Form: carregando na edição, salvando, `nome` obrigatório.
 
 ## Critério de pronto
-- CRUD funciona como em recorrências.
-- `/profiles?serie_id=X` mostra só os perfis daquela recorrência.
+- CRUD funciona como em recorrências (linhas inseridas/atualizadas na tabela Delta).
+- `/profiles?serie_id=X` mostra só os perfis daquela recorrência (filtro via `WHERE serie_id`).

@@ -4,12 +4,13 @@
 Ligar registros relacionados por cliques, sem novas páginas. Implementado como toolbars/links
 dentro das páginas já existentes + filtros por query param nas listas.
 
-## Filtros de lista por query param (já refletidos nos data/*)
-- `/profiles?serie_id=<id>` → `listProfilesByRecurrence(serieId)` (filtro no cliente).
-- `/occurrences?serie_id=<id>` → `listOccurrences({ serie_id })` (filtro no cliente).
-- `/transcriptions?reuniao_id=<id>` → `listTranscriptions({ reuniao_id })` (filtro no cliente).
-- `/summarizations?reuniao_id=<id>` → `listSummarizations({ reuniao_id })` (filtro no cliente).
-- Cada lista lê o param com `useSearchParams` e ajusta o título quando filtrada.
+## Filtros de lista por query param (aplicados via SQL `WHERE` nos `data/*`)
+- `/profiles?serie_id=<id>` → `listProfilesByRecurrence(serieId)` → `WHERE serie_id = :serie_id`.
+- `/occurrences?serie_id=<id>` → `listOccurrences({ serie_id })` → `WHERE serie_id = :serie_id`.
+- `/transcriptions?reuniao_id=<id>` → `listTranscriptions({ reuniao_id })` → `WHERE reuniao_id = :reuniao_id`.
+- `/summarizations?reuniao_id=<id>` → `listSummarizations({ reuniao_id })` → `WHERE reuniao_id = :reuniao_id`.
+- Cada lista lê o param com `useSearchParams` e ajusta o título quando filtrada. O filtro acontece
+  no **SQL** (cláusula `WHERE` parametrizada no `data/*`), não no cliente.
 
 ## Links por página (toolbar `.toolbar` no topo, abaixo do `<h2>`)
 - **RecurrenceForm** (só no modo edição, usa o `:id` da recorrência):

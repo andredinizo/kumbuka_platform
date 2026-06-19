@@ -1,35 +1,42 @@
-// REGRA #4: unico arquivo que conhece a lista Ocorrencias e seus campos.
-import { graphGet, SITE_ID } from './graphClient.js'
+// REGRA #4: unico arquivo que conhece a tabela meeting_occurrence e suas colunas. Somente leitura
+// (os dados vem do pipeline).
+import { dbQuery, param } from './databricksClient.js'
 
-const LIST = 'Ocorrencias'
-const base = () => `/sites/${SITE_ID}/lists/${LIST}`
+const TABLE = 'meeting_occurrence'
+const COLS = `id, serie_id, timestamp_inicio, timestamp_fim, local_gravacao,
+  status_transcricao_whisper, status_vtt, status_enriquecimento, status_sumarizacao,
+  status_entrega, timestamp_criacao, timestamp_atualizacao`
 
-function fromItem(item) {
-  const f = item.fields || {}
+function fromRow(r) {
   return {
-    id: item.id,
-    serie_id: f.serie_id ?? '',
-    timestamp_inicio: f.timestamp_inicio ?? '',
-    timestamp_fim: f.timestamp_fim ?? '',
-    local_gravacao: f.local_gravacao ?? '',
-    status_transcricao_whisper: f.status_transcricao_whisper ?? '',
-    status_vtt: f.status_vtt ?? '',
-    status_enriquecimento: f.status_enriquecimento ?? '',
-    status_sumarizacao: f.status_sumarizacao ?? '',
-    status_entrega: f.status_entrega ?? '',
-    timestamp_criacao: f.timestamp_criacao ?? '',
-    timestamp_atualizacao: f.timestamp_atualizacao ?? '',
+    id: r.id ?? '',
+    serie_id: r.serie_id ?? '',
+    timestamp_inicio: r.timestamp_inicio ?? '',
+    timestamp_fim: r.timestamp_fim ?? '',
+    local_gravacao: r.local_gravacao ?? '',
+    status_transcricao_whisper: r.status_transcricao_whisper ?? '',
+    status_vtt: r.status_vtt ?? '',
+    status_enriquecimento: r.status_enriquecimento ?? '',
+    status_sumarizacao: r.status_sumarizacao ?? '',
+    status_entrega: r.status_entrega ?? '',
+    timestamp_criacao: r.timestamp_criacao ?? '',
+    timestamp_atualizacao: r.timestamp_atualizacao ?? '',
   }
 }
 
 export async function listOccurrences(filters = {}) {
-  const data = await graphGet(`${base()}/items?expand=fields`)
-  let rows = (data.value || []).map(fromItem)
-  if (filters.serie_id) rows = rows.filter((o) => o.serie_id === filters.serie_id)
-  return rows
+  // Filtro por serie_id feito no SQL (WHERE), nao no cliente.
+  const where = filters.serie_id ? 'WHERE serie_id = :serie_id' : ''
+  const params = filters.serie_id ? [param('serie_id', filters.serie_id)] : []
+  const rows = await dbQuery(
+    `SELECT ${COLS} FROM ${TABLE} ${where} ORDER BY timestamp_inicio DESC`,
+    params
+  )
+  return rows.map(fromRow)
 }
 
 export async function getOccurrence(id) {
-  const item = await graphGet(`${base()}/items/${id}?expand=fields`)
-  return fromItem(item)
+  const rows = await dbQuery(`SELECT ${COLS} FROM ${TABLE} WHERE id = :id`, [param('id', id)])
+  if (!rows.length) throw new Error(`Ocorrencia ${id} nao encontrada.`)
+  return fromRow(rows[0])
 }

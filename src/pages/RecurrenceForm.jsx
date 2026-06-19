@@ -8,7 +8,7 @@ import {
   updateRecurrence,
 } from '../data/recurrences.js'
 
-const EMPTY = { nome: '', serie_ativa: false, descricao: '', local_gravacao: '' }
+const EMPTY = { nome: '', recorrencia_ativa: false, descricao: '', local_gravacao: '' }
 
 export default function RecurrenceForm() {
   const { id } = useParams()
@@ -65,7 +65,7 @@ export default function RecurrenceForm() {
         error={error}
       >
         <Field label="Nome" required value={values.nome} onChange={set('nome')} />
-        <Field label="Ativa" type="checkbox" value={values.serie_ativa} onChange={set('serie_ativa')} />
+        <Field label="Ativa" type="checkbox" value={values.recorrencia_ativa} onChange={set('recorrencia_ativa')} />
         <Field label="Descrição" type="textarea" value={values.descricao} onChange={set('descricao')} />
         <Field label="Local da gravação" value={values.local_gravacao} onChange={set('local_gravacao')} />
       </Form>

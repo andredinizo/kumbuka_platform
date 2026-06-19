@@ -1,71 +1,106 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
-
-// Proxy local que autentica no Microsoft Graph com a app registration (client_credentials)
-// e repassa qualquer requisicao /graph/* para o Graph. Guarda o segredo fora do browser.
-// E um repassador "burro": nao conhece listas nem entidades (regra do plano).
-function graphProxy(env) {
-  const { TENANT_ID, CLIENT_ID, CLIENT_SECRET } = env
-  let cached = { token: null, exp: 0 }
-
-  async function getToken() {
-    const now = Date.now()
-    if (cached.token && now < cached.exp - 60_000) return cached.token
-    if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
-      throw new Error(
-        'Faltam variaveis no .env: TENANT_ID, CLIENT_ID, CLIENT_SECRET. Copie .env.example para .env e preencha.'
-      )
-    }
-    const res = await fetch(
-      `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          scope: 'https://graph.microsoft.com/.default',
-          client_id: CLIENT_ID,
-          client_secret: CLIENT_SECRET,
-        }),
-      }
-    )
-    if (!res.ok) {
-      throw new Error(`Falha ao obter token (${res.status}): ${await res.text()}`)
-    }
-    const data = await res.json()
-    cached = { token: data.access_token, exp: now + data.expires_in * 1000 }
-    return cached.token
-  }
+// Proxy local que autentica no Databricks (token de acesso) e executa SQL via a
+// SQL Statement Execution API (POST /api/2.0/sql/statements + poll ate concluir).
+// Guarda o token fora do browser. E um repassador "burro": conhece a CONEXAO
+// (host/token/warehouse/catalog/schema) mas NAO conhece tabelas nem entidades — toda essa
+// logica fica em src/data/*. Expoe um unico endpoint /sql que recebe { statement, parameters }
+// e devolve { columns, rows }.
+function databricksProxy(env) {
+  const {
+    DATABRICKS_HOST,
+    DATABRICKS_TOKEN,
+    DATABRICKS_WAREHOUSE_ID,
+    DATABRICKS_CATALOG,
+    DATABRICKS_SCHEMA,
+  } = env
 
   function readBody(req) {
     return new Promise((resolve) => {
       const chunks = []
       req.on('data', (c) => chunks.push(c))
-      req.on('end', () => resolve(chunks.length ? Buffer.concat(chunks) : null))
+      req.on('end', () => resolve(chunks.length ? Buffer.concat(chunks).toString('utf8') : ''))
     })
   }
 
+  function requireConfig() {
+    if (!DATABRICKS_HOST || !DATABRICKS_TOKEN || !DATABRICKS_WAREHOUSE_ID) {
+      throw new Error(
+        'Faltam variaveis no .env: DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID. ' +
+          'Copie .env.example para .env e preencha.'
+      )
+    }
+  }
+
+  const apiBase = () => DATABRICKS_HOST.replace(/\/$/, '') + '/api/2.0/sql/statements'
+
+  function dbFetch(path, options) {
+    return fetch(apiBase() + path, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${DATABRICKS_TOKEN}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+    })
+  }
+
+  // Token e um PAT estatico (lido do .env): nao ha fluxo OAuth nem cache/renovacao.
+  // Executa o statement e faz poll ate estado terminal; devolve o JSON final da API.
+  async function runStatement(statement, parameters) {
+    const res = await dbFetch('/', {
+      method: 'POST',
+      body: JSON.stringify({
+        statement,
+        warehouse_id: DATABRICKS_WAREHOUSE_ID,
+        catalog: DATABRICKS_CATALOG || undefined,
+        schema: DATABRICKS_SCHEMA || undefined,
+        parameters: parameters && parameters.length ? parameters : undefined,
+        wait_timeout: '30s',
+        on_wait_timeout: 'CONTINUE',
+        format: 'JSON_ARRAY',
+        disposition: 'INLINE',
+      }),
+    })
+    let data = await res.json()
+    if (!res.ok) throw new Error(`Databricks ${res.status}: ${JSON.stringify(data)}`)
+
+    const RUNNING = new Set(['PENDING', 'RUNNING'])
+    while (data.status && RUNNING.has(data.status.state)) {
+      await new Promise((r) => setTimeout(r, 1000))
+      const poll = await dbFetch(`/${data.statement_id}`, { method: 'GET' })
+      data = await poll.json()
+      if (!poll.ok) throw new Error(`Databricks ${poll.status}: ${JSON.stringify(data)}`)
+    }
+    return data
+  }
+
   const middleware = async (req, res, next) => {
-    if (!req.url || !req.url.startsWith('/graph/')) return next()
+    if (!req.url || req.method !== 'POST' || req.url.split('?')[0] !== '/sql') return next()
     try {
-      const token = await getToken()
-      const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req)
-      const target = GRAPH_BASE + req.url.slice('/graph'.length)
-      const upstream = await fetch(target, {
-        method: req.method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': req.headers['content-type'] || 'application/json',
-          Accept: 'application/json',
-        },
-        body,
-      })
-      const text = await upstream.text()
-      res.statusCode = upstream.status
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json')
-      res.end(text)
+      requireConfig()
+      const raw = await readBody(req)
+      const { statement, parameters } = raw ? JSON.parse(raw) : {}
+      if (!statement) throw new Error('Corpo invalido: faltou "statement".')
+
+      const data = await runStatement(statement, parameters)
+      const state = data.status && data.status.state
+      if (state !== 'SUCCEEDED') {
+        const msg = data.status && data.status.error ? data.status.error.message : `estado ${state}`
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: `Query nao concluiu (${state}): ${msg}` }))
+        return
+      }
+      // Resultado columnar: nomes em manifest.schema.columns; linhas em result.data_array.
+      const columns = (
+        (data.manifest && data.manifest.schema && data.manifest.schema.columns) || []
+      ).map((c) => c.name)
+      const rows = (data.result && data.result.data_array) || []
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ columns, rows }))
     } catch (err) {
       res.statusCode = 500
       res.setHeader('Content-Type', 'application/json')
@@ -73,10 +108,11 @@ function graphProxy(env) {
     }
   }
 
-  // Registrado em dev (npm run dev) E no preview do build (npm run preview), para que a
-  // app rodada em outra maquina funcione tanto em dev quanto a partir do build.
+  // Registrado em dev (npm run dev) E no preview do build (npm run preview), para que a app
+  // rodada em outra maquina funcione tanto em dev quanto a partir do build. Use corpo de bloco,
+  // nunca arrow com retorno implicito (o Vite trataria o retorno como post-hook e quebraria).
   return {
-    name: 'graph-proxy',
+    name: 'databricks-proxy',
     configureServer(server) {
       server.middlewares.use(middleware)
     },
@@ -87,10 +123,10 @@ function graphProxy(env) {
 }
 
 export default defineConfig(({ mode }) => {
-  // Carrega .env tornando TENANT_ID/CLIENT_ID/CLIENT_SECRET visiveis ao proxy (lado servidor).
-  // VITE_SITE_ID fica exposto ao client (nao e segredo).
+  // Carrega .env tornando DATABRICKS_* visiveis ao proxy (lado servidor). Nenhuma var e exposta
+  // ao client (sem prefixo VITE_): o token nunca chega ao browser.
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), graphProxy(env)],
+    plugins: [react(), databricksProxy(env)],
   }
 })

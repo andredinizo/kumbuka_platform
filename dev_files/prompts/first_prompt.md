@@ -3,7 +3,7 @@ In @dev_files/plano_ex_plataforma.md there is the plan for the whole project EXC
 
 The frontend we're gonna develop is an MVP, so we'll follow this rules:
     1. It needs to be writen in a simple way, without unecessary abstractions or "good practices" that will only be useful in the future
-    2. We wont have a place to host a back or front end for this project. Right now a the data we're gonna handle is in sharepoint, so we'll have sharepoint as a "backend" (i'll bring to sharepoint the data that is not already there). For the frontend, it will need to be run on the client's computer, regardless of being an app or a self-hosted web page.
+    2. We wont have a place to host a back or front end for this project. The data we're gonna handle lives in Databricks tables (Delta / Unity Catalog), so Databricks is the "backend": the frontend reads and writes via SQL (Databricks SQL Statement Execution API). For the frontend, it will need to be run on the client's computer, regardless of being an app or a self-hosted web page.
     3. Because this project is "an atempt", we'll need to have a detailed plan for everything that is built. This way, i can manually alter the plan and rebuild entire files from scratch if things go wrong. It's important that those detailed plans be writen in a tone that is optimezed for a LLM to build the features, but that they also are readable by a senior software developer.
 
 About the solution:

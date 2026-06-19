@@ -1,48 +1,60 @@
-// REGRA #4: este e o UNICO arquivo que conhece a lista MeetingSeries e seus campos.
-// Se a recorrencia mudar de lugar (outra lista, outro backend), muda-se SO aqui.
-import { graphGet, graphPost, graphPatch, SITE_ID } from './graphClient.js'
+// REGRA #4: este e o UNICO arquivo que conhece a tabela recorrencias_reuniao e suas colunas.
+// Se a recorrencia mudar de lugar (outra tabela, outro backend), muda-se SO aqui.
+import { dbQuery, param } from './databricksClient.js'
 
-const LIST = 'MeetingSeries'
-const base = () => `/sites/${SITE_ID}/lists/${LIST}`
+const TABLE = 'recorrencias_reuniao'
+const COLS = 'id, nome, recorrencia_ativa, descricao, local_gravacao'
 
-// SharePoint guarda os dados em item.fields. Traduz fields -> objeto da app.
-function fromItem(item) {
-  const f = item.fields || {}
+// Linha do Databricks (tudo string) -> objeto da app, com coercao de tipos.
+function fromRow(r) {
   return {
-    id: item.id,
-    nome: f.nome ?? f.Title ?? '',
-    serie_ativa: !!f.serie_ativa,
-    descricao: f.descricao ?? '',
-    local_gravacao: f.local_gravacao ?? '',
-  }
-}
-
-// objeto da app -> fields para POST/PATCH.
-function toFields(data) {
-  return {
-    nome: data.nome,
-    serie_ativa: data.serie_ativa,
-    descricao: data.descricao,
-    local_gravacao: data.local_gravacao,
+    id: r.id ?? '',
+    nome: r.nome ?? '',
+    recorrencia_ativa: r.recorrencia_ativa === 'true',
+    descricao: r.descricao ?? '',
+    local_gravacao: r.local_gravacao ?? '',
   }
 }
 
 export async function listRecurrences() {
-  const data = await graphGet(`${base()}/items?expand=fields`)
-  return (data.value || []).map(fromItem)
+  const rows = await dbQuery(`SELECT ${COLS} FROM ${TABLE} ORDER BY nome`)
+  return rows.map(fromRow)
 }
 
 export async function getRecurrence(id) {
-  const item = await graphGet(`${base()}/items/${id}?expand=fields`)
-  return fromItem(item)
+  const rows = await dbQuery(`SELECT ${COLS} FROM ${TABLE} WHERE id = :id`, [param('id', id)])
+  if (!rows.length) throw new Error(`Recorrencia ${id} nao encontrada.`)
+  return fromRow(rows[0])
 }
 
 export async function createRecurrence(data) {
-  const item = await graphPost(`${base()}/items`, { fields: toFields(data) })
-  return fromItem(item)
+  const id = crypto.randomUUID()
+  await dbQuery(
+    `INSERT INTO ${TABLE} (id, nome, recorrencia_ativa, descricao, local_gravacao)
+     VALUES (:id, :nome, :recorrencia_ativa, :descricao, :local_gravacao)`,
+    [
+      param('id', id),
+      param('nome', data.nome),
+      param('recorrencia_ativa', !!data.recorrencia_ativa, 'BOOLEAN'),
+      param('descricao', data.descricao),
+      param('local_gravacao', data.local_gravacao),
+    ]
+  )
+  return getRecurrence(id)
 }
 
 export async function updateRecurrence(id, data) {
-  await graphPatch(`${base()}/items/${id}/fields`, toFields(data))
+  await dbQuery(
+    `UPDATE ${TABLE} SET nome = :nome, recorrencia_ativa = :recorrencia_ativa,
+       descricao = :descricao, local_gravacao = :local_gravacao
+     WHERE id = :id`,
+    [
+      param('id', id),
+      param('nome', data.nome),
+      param('recorrencia_ativa', !!data.recorrencia_ativa, 'BOOLEAN'),
+      param('descricao', data.descricao),
+      param('local_gravacao', data.local_gravacao),
+    ]
+  )
   return getRecurrence(id)
 }
