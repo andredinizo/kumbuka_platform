@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getOccurrence } from '../data/occurrences.js'
 import StatusBadge from '../components/StatusBadge.jsx'
+import RefreshBar from '../components/RefreshBar.jsx'
+import { useRefreshableQuery } from '../hooks/useRefreshableQuery.js'
 import { formatDateTime } from '../format.js'
 
 const STATUS_FIELDS = [
@@ -14,24 +15,20 @@ const STATUS_FIELDS = [
 
 export default function OccurrenceDetail() {
   const { id } = useParams()
-  const [o, setO] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const { data: o, loading, error, lastUpdated, refresh } = useRefreshableQuery(
+    () => getOccurrence(id),
+    { deps: [id] }
+  )
 
-  useEffect(() => {
-    getOccurrence(id)
-      .then(setO)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [id])
-
-  if (loading) return <p className="muted">Carregando…</p>
-  if (error) return <p className="error">{error}</p>
+  if (loading && !o) return <p className="muted">Carregando…</p>
+  if (error && !o) return <p className="error">{error}</p>
   if (!o) return null
 
   return (
     <div>
       <h2>Ocorrência</h2>
+      <RefreshBar lastUpdated={lastUpdated} loading={loading} onRefresh={refresh} />
+      {error && <p className="error">{error}</p>}
       <div className="toolbar">
         <Link className="btn" to={`/transcriptions?reuniao_id=${o.id}`}>Ver transcrições</Link>
         <Link className="btn" to={`/summarizations?reuniao_id=${o.id}`}>Ver sumarizações</Link>

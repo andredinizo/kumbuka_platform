@@ -1,29 +1,26 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSummarization } from '../data/summarizations.js'
 import DownloadButton from '../components/DownloadButton.jsx'
+import RefreshBar from '../components/RefreshBar.jsx'
+import { useRefreshableQuery } from '../hooks/useRefreshableQuery.js'
 import { formatDateTime } from '../format.js'
 
 export default function SummarizationDetail() {
   const { id } = useParams()
-  const [s, setS] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const { data: s, loading, error, lastUpdated, refresh } = useRefreshableQuery(
+    () => getSummarization(id),
+    { deps: [id] }
+  )
 
-  useEffect(() => {
-    getSummarization(id)
-      .then(setS)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [id])
-
-  if (loading) return <p className="muted">Carregando…</p>
-  if (error) return <p className="error">{error}</p>
+  if (loading && !s) return <p className="muted">Carregando…</p>
+  if (error && !s) return <p className="error">{error}</p>
   if (!s) return null
 
   return (
     <div>
       <h2>Sumarização</h2>
+      <RefreshBar lastUpdated={lastUpdated} loading={loading} onRefresh={refresh} />
+      {error && <p className="error">{error}</p>}
       <div className="toolbar">
         <DownloadButton
           filename={`sumarizacao_${s.id}.html`}

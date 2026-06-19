@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listRecurrences } from '../data/recurrences.js'
 import { listProfiles } from '../data/profiles.js'
@@ -6,6 +5,8 @@ import { listOccurrences } from '../data/occurrences.js'
 import { listTranscriptions } from '../data/transcriptions.js'
 import { listSummarizations } from '../data/summarizations.js'
 import StatusBadge from '../components/StatusBadge.jsx'
+import RefreshBar from '../components/RefreshBar.jsx'
+import { useRefreshableQuery } from '../hooks/useRefreshableQuery.js'
 import { formatDateTime } from '../format.js'
 
 const STATUS_FIELDS = [
@@ -16,54 +17,57 @@ const STATUS_FIELDS = [
   ['Entrega', 'status_entrega'],
 ]
 
+// Cada lista e independente: usa allSettled para exibir o que carregou mesmo se uma falhar.
+async function loadDashboard() {
+  const results = await Promise.allSettled([
+    listRecurrences(),
+    listProfiles(),
+    listOccurrences(),
+    listTranscriptions(),
+    listSummarizations(),
+  ])
+  const [rec, prof, occ, tr, sum] = results
+  const val = (r) => (r.status === 'fulfilled' ? r.value : [])
+  return {
+    counts: {
+      recurrences: val(rec).length,
+      profiles: val(prof).length,
+      occurrences: val(occ).length,
+      transcriptions: val(tr).length,
+      summarizations: val(sum).length,
+    },
+    failed: val(occ).filter((o) => STATUS_FIELDS.some(([, k]) => o[k] === 'falhou')),
+    errors: results.filter((r) => r.status === 'rejected').map((r) => r.reason.message),
+  }
+}
+
+const CARDS = [
+  { label: 'Recorrências', key: 'recurrences', to: '/recurrences' },
+  { label: 'Perfis', key: 'profiles', to: '/profiles' },
+  { label: 'Ocorrências', key: 'occurrences', to: '/occurrences' },
+  { label: 'Transcrições', key: 'transcriptions', to: '/transcriptions' },
+  { label: 'Sumarizações', key: 'summarizations', to: '/summarizations' },
+]
+
 export default function Dashboard() {
-  const [counts, setCounts] = useState({})
-  const [failed, setFailed] = useState([])
-  const [errors, setErrors] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.allSettled([
-      listRecurrences(),
-      listProfiles(),
-      listOccurrences(),
-      listTranscriptions(),
-      listSummarizations(),
-    ]).then((results) => {
-      const [rec, prof, occ, tr, sum] = results
-      const val = (r) => (r.status === 'fulfilled' ? r.value : [])
-      setCounts({
-        recurrences: val(rec).length,
-        profiles: val(prof).length,
-        occurrences: val(occ).length,
-        transcriptions: val(tr).length,
-        summarizations: val(sum).length,
-      })
-      setFailed(
-        val(occ).filter((o) => STATUS_FIELDS.some(([, k]) => o[k] === 'falhou'))
-      )
-      setErrors(results.filter((r) => r.status === 'rejected').map((r) => r.reason.message))
-      setLoading(false)
-    })
-  }, [])
-
-  const CARDS = [
-    { label: 'Recorrências', key: 'recurrences', to: '/recurrences' },
-    { label: 'Perfis', key: 'profiles', to: '/profiles' },
-    { label: 'Ocorrências', key: 'occurrences', to: '/occurrences' },
-    { label: 'Transcrições', key: 'transcriptions', to: '/transcriptions' },
-    { label: 'Sumarizações', key: 'summarizations', to: '/summarizations' },
-  ]
+  const { data, stale, loading, error, lastUpdated, refresh } = useRefreshableQuery(loadDashboard, {
+    cacheKey: 'dashboard',
+  })
+  const counts = data?.counts ?? {}
+  const failed = data?.failed ?? []
+  const errors = data?.errors ?? []
 
   return (
     <div>
       <h2>Dashboard</h2>
-      {loading && <p className="muted">Carregando…</p>}
+      <RefreshBar lastUpdated={lastUpdated} loading={loading} stale={stale} onRefresh={refresh} />
+      {error && <p className="error">{error}</p>}
       {errors.map((e, i) => (
         <p className="error" key={i}>{e}</p>
       ))}
+      {loading && !data && <p className="muted">Carregando…</p>}
 
-      {!loading && (
+      {data && (
         <>
           <div className="cards">
             {CARDS.map((c) => (

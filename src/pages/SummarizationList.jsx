@@ -1,30 +1,27 @@
-import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listSummarizations } from '../data/summarizations.js'
+import RefreshBar from '../components/RefreshBar.jsx'
+import { useRefreshableQuery } from '../hooks/useRefreshableQuery.js'
 import { formatDateTime } from '../format.js'
 
 export default function SummarizationList() {
   const [params] = useSearchParams()
   const reuniaoId = params.get('reuniao_id')
-  const [rows, setRows] = useState([])
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    setLoading(true)
-    listSummarizations(reuniaoId ? { reuniao_id: reuniaoId } : {})
-      .then(setRows)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [reuniaoId])
+  const { data, stale, loading, error, lastUpdated, refresh } = useRefreshableQuery(
+    () => listSummarizations(reuniaoId ? { reuniao_id: reuniaoId } : {}),
+    { cacheKey: reuniaoId ? `summarizations:reuniao=${reuniaoId}` : 'summarizations', deps: [reuniaoId] }
+  )
+  const rows = data || []
 
   return (
     <div>
       <h2>Sumarizações{reuniaoId ? ' (de uma ocorrência)' : ''}</h2>
-      {loading && <p className="muted">Carregando…</p>}
+      <RefreshBar lastUpdated={lastUpdated} loading={loading} stale={stale} onRefresh={refresh} />
       {error && <p className="error">{error}</p>}
+      {loading && rows.length === 0 && <p className="muted">Carregando…</p>}
       {!loading && !error && rows.length === 0 && <p className="muted">Nenhuma sumarização.</p>}
-      {!loading && !error && rows.length > 0 && (
+      {rows.length > 0 && (
         <table>
           <thead>
             <tr><th>Perfil</th><th>Ocorrência</th><th>Status</th><th>Criada em</th><th></th></tr>

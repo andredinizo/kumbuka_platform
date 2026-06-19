@@ -32,9 +32,11 @@ A estratégia tem 3 camadas que se complementam. Nenhuma sozinha resolve tudo.
   (um blocker de tela cheia parece mais quebrado que um shell populado com painel de carregamento).
 
 ## Camada 2 — Stale-while-revalidate (SWR) nas listas/dashboard (cobre REVISITAS)
-- **Cache em `localStorage`**, keyed por `SQL + parameters`, feito dentro de `dbQuery` (genérico, sem
-  lógica de entidade). **Só** para os `SELECT` de **lista/overview** — que já não trazem a coluna
-  `texto` (logo são baratos). **NÃO** cachear detalhe (texto grande) nem dados de formulário.
+- **Cache em `localStorage`**: helpers genéricos `readCache/writeCache` em `databricksClient.js`,
+  orquestrados pelo hook `useRefreshableQuery` e keyed por um **`cacheKey` semântico** que a página
+  passa (ex.: `recurrences`, `profiles:serie=<id>`, `dashboard`) — mais estável/legível que a SQL
+  crua. **Só** páginas de **lista/overview** passam `cacheKey` (os `SELECT` de lista já não trazem a
+  coluna `texto`, logo são baratos). Detalhe e formulários **não** passam `cacheKey` (não cacheiam).
 - **Comportamento na revisita:** renderiza os dados do cache **na hora** (estado visualmente
   "ofuscado/cinza" + aviso amarelo "atualizando…"); o warehouse sobe em background; ao concluir, troca
   pelos dados frescos e muda o status para verde "atualizado".
@@ -82,17 +84,24 @@ qual se salva** sempre reflete o estado atual no momento do load.
   (b) coluna de versão/`timestamp_atualizacao` com `UPDATE ... WHERE id = :id AND timestamp_atualizacao
   = :loaded_at` (precisa o proxy expor `num_affected_rows`). Atualizar este doc se adotado.
 
-## Arquivos afetados
-- `src/data/databricksClient.js` — pub/sub de status, cache SWR (`localStorage` por SQL+params),
-  `warmUp()`, timing do limiar de cold start. Continua **sem lógica de entidade** (cache genérico).
+## Arquivos (como ficou implementado)
+- `src/data/databricksClient.js` — pub/sub de status (`getStatus`/`subscribeStatus`), timing do limiar
+  de cold start em `dbQuery`, `warmUp()`, e helpers genéricos de cache `readCache`/`writeCache`
+  (`localStorage`, prefixo `kdbx:`). Continua **sem lógica de entidade**.
+- `src/hooks/useRefreshableQuery.js` (novo) — `{ data, stale, loading, error, lastUpdated, refresh }`;
+  base das páginas de lista/detalhe; faz o SWR via `cacheKey` (opcional).
+- `src/hooks/useStaleness.js` (novo) — limiar de 15 min (`STALE_THRESHOLD_MS`) medido do load.
+- `src/components/ConnectionBanner.jsx` (novo) — status global: `warming` (+contador), `error`/teto
+  com "Tentar de novo".
+- `src/components/RefreshBar.jsx` (novo) — "Atualizado há X" + botão Atualizar; destaque amarelo
+  quando `stale`.
+- `src/components/Form.jsx` — `frozen` (congela campos via `<fieldset disabled>`) e `submitDisabled`.
 - `src/App.jsx` — chama `warmUp()` no mount; renderiza `<ConnectionBanner>`.
-- `src/components/ConnectionBanner.jsx` (novo) — status global: `warming` (+contador), `error`+retry.
-- `src/hooks/useRefreshableQuery.js` (novo) — `{ data, loading, error, lastUpdated, refresh }`; base
-  das páginas de lista/detalhe. Renderiza o "atualizado há X" + botão Atualizar (ou via um
-  `<RefreshBar>` que o consome).
-- Páginas de **edição** — lógica de lock por staleness ciente de dirty (campo "sujo").
-- `src/styles.css` — estados `.refreshing`/`.stale` (amarelo), `.fresh` (verde), banner, campos
-  cinza/disabled.
+- Páginas de **lista/Dashboard** usam `useRefreshableQuery` + `RefreshBar` (+`cacheKey`); **detalhe**
+  usa o hook sem `cacheKey`; **edição** (recorrências/perfis) carrega fresco + lock de staleness
+  ciente de dirty.
+- `src/styles.css` — `.conn-banner` (`.conn-warn`/`.conn-error`), `.refreshbar`/`.refreshbar-stale`,
+  `.form-fields:disabled` (campos ofuscados).
 
 ## Estados de borda
 - **Cache vazio** (primeiro acesso, ou storage limpo): não há SWR — cai no baseline (`warming`).

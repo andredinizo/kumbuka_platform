@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
+import ConnectionBanner from './components/ConnectionBanner.jsx'
+import { warmUp } from './data/databricksClient.js'
 import Dashboard from './pages/Dashboard.jsx'
 import RecurrenceList from './pages/RecurrenceList.jsx'
 import RecurrenceForm from './pages/RecurrenceForm.jsx'
@@ -23,6 +26,11 @@ const NAV = [
 ]
 
 export default function App() {
+  // Sobe o warehouse cedo, enquanto o usuario ainda se orienta (ver 08-conexao-warehouse.md).
+  useEffect(() => {
+    warmUp()
+  }, [])
+
   return (
     <div className="layout">
       <nav className="sidebar">
@@ -34,6 +42,7 @@ export default function App() {
         ))}
       </nav>
       <main className="content">
+        <ConnectionBanner />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/recurrences" element={<RecurrenceList />} />

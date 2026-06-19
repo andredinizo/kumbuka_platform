@@ -1,32 +1,29 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listRecurrences } from '../data/recurrences.js'
+import { useRefreshableQuery } from '../hooks/useRefreshableQuery.js'
+import RefreshBar from '../components/RefreshBar.jsx'
 
 // Prova o fluxo ponta-a-ponta da fundacao: pagina -> data/* -> proxy /sql -> Databricks (recorrencias_reuniao).
 export default function RecurrenceList() {
-  const [rows, setRows] = useState([])
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    listRecurrences()
-      .then(setRows)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
+  const { data, stale, loading, error, lastUpdated, refresh } = useRefreshableQuery(
+    () => listRecurrences(),
+    { cacheKey: 'recurrences' }
+  )
+  const rows = data || []
 
   return (
     <div>
       <h2>Recorrências de reunião</h2>
+      <RefreshBar lastUpdated={lastUpdated} loading={loading} stale={stale} onRefresh={refresh} />
       <p>
         <Link className="btn" to="/recurrences/new">+ Nova recorrência</Link>
       </p>
-      {loading && <p className="muted">Carregando…</p>}
       {error && <p className="error">{error}</p>}
+      {loading && rows.length === 0 && <p className="muted">Carregando…</p>}
       {!loading && !error && rows.length === 0 && (
         <p className="muted">Nenhuma recorrência cadastrada.</p>
       )}
-      {!loading && !error && rows.length > 0 && (
+      {rows.length > 0 && (
         <table>
           <thead>
             <tr>
