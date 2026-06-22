@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
+import BrandLogo from './components/BrandLogo.jsx'
 import ConnectionBanner from './components/ConnectionBanner.jsx'
 import { warmUp } from './data/databricksClient.js'
 import Dashboard from './pages/Dashboard.jsx'
@@ -34,7 +35,10 @@ export default function App() {
   return (
     <div className="layout">
       <nav className="sidebar">
-        <h1 className="brand">Kumbuk.ai</h1>
+        <div className="brand">
+          <span className="brand-name">Kumbuk.ai</span>
+          <BrandLogo />
+        </div>
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end} className="navlink">
             {n.label}

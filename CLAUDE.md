@@ -23,8 +23,8 @@ SPA React + Vite. **Databricks é o único backend** (tabelas Delta / Unity Cata
   - Escritas usam `crypto.randomUUID()` no client para o `id`, depois `getX(id)` retorna a linha.
   - Filtros (`serie_id`, `reuniao_id`) são aplicados no **SQL** (`WHERE`), não no cliente.
 - **Páginas** em `src/pages/` (lista + formulário/detalhe). **Componentes** reutilizáveis em
-  `src/components/`: `Field`, `Form`, `StatusBadge`, `DownloadButton`. `src/format.js` =
-  `formatDateTime` (pt-BR).
+  `src/components/`: `Field`, `Form`, `StatusBadge`, `DownloadButton`, `BrandLogo` (marca na navbar
+  + easter egg "trinca e cai", `09-marca-e-easter-egg.md`). `src/format.js` = `formatDateTime` (pt-BR).
 - **Cold start / frescor dos dados**: o warehouse pode levar até ~1 min para subir (cold start). O
   tratamento é cross-cutting e mora em `dbQuery` (status de conexão, cache SWR, warm-up) + um banner
   global + um hook `useRefreshableQuery` (indicador "atualizado há X" + botão Atualizar). Páginas de

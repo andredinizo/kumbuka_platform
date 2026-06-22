@@ -15,7 +15,75 @@ body {
   flex-direction: column;
   gap: 4px;
 }
-.brand { font-size: 20px; margin: 4px 8px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; margin: 4px 8px 16px; min-height: 28px; }
+.brand-name { font-size: 20px; font-weight: 700; }
+
+/* Logo + easter egg "trinca e cai" (ver 09-marca-e-easter-egg.md) */
+.brand-logo { height: 24px; width: auto; user-select: none; transform-origin: top center; filter: brightness(1.2); }
+/* Pos-queda: logo vira espacador invisivel, mas mantem o tamanho do slot (sem pulo do icone). */
+.brand-logo.spent { visibility: hidden; }
+/* Wrapper da queda: carrega SO o eixo X (linear). E o X ser linear que faz a
+   trajetoria virar uma parabola de verdade (X = a*t, Y ~ t² => Y proporcional a X²). */
+.brand-fly { display: inline-block; }
+.brand-fly.breaking { animation: brand-fly-x 1.1s linear 0.15s forwards; }
+/* Wabble crescente nos 3 ultimos cliques: 8 (leve) -> 9 (medio) -> 10/crack (climax). */
+.brand-logo.wobble-1 { animation: brand-wobble-1 0.15s ease-in-out; }
+.brand-logo.wobble-2 { animation: brand-wobble-2 0.2s ease-in-out; }
+.brand-logo.breaking {
+  /* crack -> eixo Y da queda (mesmo 1.1s/0.15s do X p/ ficarem em sincronia) */
+  animation: brand-crack 0.20s ease-in-out, brand-fly-y 1.1s linear 0.15s forwards;
+}
+@keyframes brand-wobble-1 {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(2deg); }
+  70% { transform: rotate(-2deg); }
+}
+@keyframes brand-wobble-2 {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(4deg); }
+  50% { transform: rotate(-4deg); }
+  80% { transform: rotate(3deg); }
+}
+@keyframes brand-crack {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: translate(1px, 0) rotate(6deg); }
+  40% { transform: translate(-1px, 0) rotate(-6deg); }
+  60% { transform: translate(1px, 0) rotate(5deg); }
+  80% { transform: translate(-1px, 1px) rotate(-4deg); }
+}
+/* Queda parabolica (dois eixos aninhados):
+   X no wrapper = SO velocidade horizontal CONSTANTE (linear), sem rotacao aqui
+   (rotar o wrapper giraria tambem o vetor Y do filho e distorceria a parabola). */
+@keyframes brand-fly-x {
+  to { transform: translateX(160px); }
+}
+/* Y no logo = projetil exato: y(t) = 171.4*t² - 51.4*t (t normalizado 0..1).
+   Pequeno empurrao pra cima (apice ~ -3.9vh em t=0.15) e depois gravidade pura ate 120vh.
+   Como X e linear e Y e t², a trajetoria e uma parabola de verdade. O giro vive AQUI
+   (no logo), proporcional ao tempo -> spin constante que NAO mexe na posicao da peca. */
+@keyframes brand-fly-y {
+  0% { transform: translateY(0) rotate(0); opacity: 1; }
+  10% { transform: translateY(-3.4vh) rotate(10deg); opacity: 1; }
+  15% { transform: translateY(-3.9vh) rotate(15deg); opacity: 1; }
+  20% { transform: translateY(-3.4vh) rotate(20deg); opacity: 1; }
+  30% { transform: translateY(0) rotate(30deg); opacity: 1; }
+  40% { transform: translateY(6.9vh) rotate(40deg); opacity: 1; }
+  50% { transform: translateY(17.2vh) rotate(50deg); opacity: 1; }
+  60% { transform: translateY(30.9vh) rotate(60deg); opacity: 1; }
+  70% { transform: translateY(48vh) rotate(70deg); opacity: 1; }
+  80% { transform: translateY(68.6vh) rotate(80deg); opacity: 1; }
+  90% { transform: translateY(92.6vh) rotate(90deg); opacity: 1; }
+  100% { transform: translateY(120vh) rotate(100deg); opacity: 0; }
+}
+/* Icone de "arquivo quebrado" no lugar do logo (invert: clareia o icone escuro p/ a sidebar). */
+.brand-broken { height: 24px; width: auto; user-select: none; filter: invert(1); }
+/* Stage: slot fixo que empilha o icone quebrado (atras) e o logo que cai (na frente). */
+.brand-stage { position: relative; display: inline-flex; }
+.brand-stage .brand-fly { position: relative; z-index: 1; }
+.brand-broken-behind { position: absolute; left: 50%; top: 0; transform: translateX(-50%); z-index: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo.breaking, .brand-fly.breaking { animation: none; }
+}
 .navlink {
   color: #cbd5e1;
   text-decoration: none;
